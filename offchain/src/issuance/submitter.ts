@@ -71,6 +71,30 @@ export class IssuanceSubmitter {
     return run;
   }
 
+  /**
+   * Explicitly retry an issuance that failed with a final revert (e.g. the recipient has since been
+   * onboarded). Never automatic: a human decides the cause is fixed. Safe because the failed round's
+   * nonce is final and spent, and the gateway still rejects the ID if it was somehow issued.
+   */
+  retryFailedIssuance(request: IssuanceRequest): Promise<IssuanceResult> {
+    const run = this.lock.then(async () => {
+      const rec = await this.store.get(request.issuanceId);
+      if (!rec || rec.status !== 'failed') throw new Error(`issuance ${request.issuanceId} is not failed`);
+      await this.store.put({
+        ...rec,
+        status: 'pending',
+        failure: undefined,
+        includedIn: undefined,
+        attempts: [],
+        failedAttempts: [...(rec.failedAttempts ?? []), ...rec.attempts],
+        pollsSinceLastAttempt: 0,
+      });
+      return this.drive(request);
+    });
+    this.lock = run.catch(() => {});
+    return run;
+  }
+
   private async drive(request: IssuanceRequest): Promise<IssuanceResult> {
     let rec = await this.store.get(request.issuanceId);
     if (!rec) {

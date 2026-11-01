@@ -17,6 +17,7 @@ const ALICE: Hex = '0x00000000000000000000000000000000000a11ce';
 const BOB: Hex = '0x0000000000000000000000000000000000000b0b';
 const ALICE2: Hex = '0x00000000000000000000000000000000000a1102';
 const ISS1: Hex = `0x${'1'.padStart(64, '0')}`;
+const ISS2: Hex = `0x${'2'.padStart(64, '0')}`;
 const AUTH1: Hex = `0x${'a'.padStart(64, '0')}`;
 
 const blockHash = (n: number, fork = 'a') => id(`block-${n}-${fork}`) as Hex; // keccak256 of the UTF-8 string
@@ -209,6 +210,21 @@ describe('reconcile: discrepancies', () => {
     });
     const r = reconcile(s, batch(tx(5, 't', authorisedTransfer(AUTH1, ALICE, BOB, 100n)), 5 + CONF), { confirmations: CONF });
     expect(r.discrepancies).toEqual([{ kind: 'BALANCE_MISMATCH', address: ALICE, record: 1100n, onChain: 900n }]);
+  });
+
+  it('drift on an address with no events in the batch shows up in standingMismatches, on every call', () => {
+    const s = stateWithAlice((s) => {
+      s.balances[BOB] = 50n; // register credits Bob with shares the chain never gave him
+      s.issuances[ISS2] = { to: ALICE, amount: 1n, status: 'requested' };
+    });
+    const b = batch(tx(5, 'mint2', mint(ISS2, ALICE, 1n)), 5 + CONF); // unrelated activity only
+    const r = reconcile(s, b, { confirmations: CONF });
+    expect(r.discrepancies.filter((d) => d.kind === 'BALANCE_MISMATCH')).toEqual([]); // Bob not touched
+    const bobDrift = { kind: 'BALANCE_MISMATCH', address: BOB, record: 50n, onChain: 0n };
+    expect(r.standingMismatches).toContainEqual(bobDrift);
+    // A snapshot, not a finding: an empty batch still reports it, and a clean state reports nothing.
+    expect(reconcile(r.state, batch([], 5 + CONF), { confirmations: CONF }).standingMismatches).toContainEqual(bobDrift);
+    expect(reconcile(stateWithAlice(), batch([], 5 + CONF), { confirmations: CONF }).standingMismatches).toEqual([]);
   });
 
   it('freeze nobody asked for', () => {

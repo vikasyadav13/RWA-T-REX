@@ -21,6 +21,8 @@ export interface IssuanceRecord {
   /** Tx hash that minted, when known (it may be unknown if another sender minted the same issuance ID). */
   mintedBy?: Hex;
   failure?: string;
+  /** Attempts of earlier failed rounds, kept for audit after `retryFailedIssuance`. */
+  failedAttempts?: Attempt[];
   lastSendError?: string;
 }
 

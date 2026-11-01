@@ -5,7 +5,7 @@
 - **Claude Code (Claude Opus 5.5) in VS Code**: read the T-REX and OnchainID sources, drafted the contracts,
   Foundry tests, TypeScript modules, tests and these documents. It also ran `forge` / `vitest`, which is how
   most of the mistakes below were caught.
-- **Foundry 1.8.5** (`forge test`, invariant metrics), **vitest 5 + fast-check 4** for property tests.
+- **Foundry 1.8.6** (`forge test`, invariant metrics), **vitest 5 + fast-check 4** for property tests.
 - How I verified AI output, in general:
   - every requirement has a failing-case test;
   - the invariants and the B1/B2 tests were **mutation-tested**: I broke the code on purpose (skip the

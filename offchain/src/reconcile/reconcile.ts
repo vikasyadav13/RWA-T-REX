@@ -76,6 +76,11 @@ export interface ReconcileResult {
   deferred: number;
   /** Events from blocks that are no longer canonical: ignored. */
   orphaned: number;
+  /**
+   * Every address where the register and the final chain view differ after this batch, touched or not.
+   * A snapshot, not a new finding: it repeats on replay, so it is kept out of `discrepancies`.
+   */
+  standingMismatches: Discrepancy[];
 }
 
 export function emptyState(): BackendState {
@@ -149,16 +154,28 @@ export function reconcile(
     for (const e of events) s.applied[eventKey(e)] = { blockNumber: e.blockNumber };
   }
 
-  for (const a of [...touched].sort()) {
+  discrepancies.push(...mismatches(s, touched));
+  const all = new Set<Address>([
+    ...(Object.keys(s.balances) as Address[]),
+    ...(Object.keys(s.observed.balances) as Address[]),
+    ...(Object.keys(s.frozen) as Address[]),
+    ...(Object.keys(s.observed.frozen) as Address[]),
+  ]);
+
+  return { state: s, discrepancies, deferred, orphaned, standingMismatches: mismatches(s, all) };
+}
+
+function mismatches(s: BackendState, addresses: Iterable<Address>): Discrepancy[] {
+  const out: Discrepancy[] = [];
+  for (const a of [...addresses].sort()) {
     const record = s.balances[a] ?? 0n;
     const onChain = s.observed.balances[a] ?? 0n;
-    if (record !== onChain) discrepancies.push({ kind: 'BALANCE_MISMATCH', address: a, record, onChain });
+    if (record !== onChain) out.push({ kind: 'BALANCE_MISMATCH', address: a, record, onChain });
     const fr = s.frozen[a] ?? 0n;
     const fo = s.observed.frozen[a] ?? 0n;
-    if (fr !== fo) discrepancies.push({ kind: 'FROZEN_MISMATCH', address: a, record: fr, onChain: fo });
+    if (fr !== fo) out.push({ kind: 'FROZEN_MISMATCH', address: a, record: fr, onChain: fo });
   }
-
-  return { state: s, discrepancies, deferred, orphaned };
+  return out;
 }
 
 // ------------------------------------------------------------------ per-transaction logic

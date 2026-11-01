@@ -24,12 +24,12 @@ git clone --recurse-submodules <repo> && cd <repo>
 forge test                      # Part A: 52 tests incl. invariant campaign (~2 s)
 forge test --match-contract GasTest -vv   # prints the gas numbers below
 
-cd offchain && npm ci && npm test   # Part B: 47 tests (vitest + fast-check, ethers v6)
+cd offchain && npm ci && npm test   # Part B: 50 tests (vitest + fast-check, ethers v6)
 npm run typecheck
 ```
 
 If you cloned without `--recurse-submodules`, run `git submodule update --init --recursive` first.
-Tested with Foundry 1.8.5 and Node 24.
+Tested with Foundry 1.8.6 and Node 24.
 
 ## Layout
 
@@ -99,6 +99,12 @@ Each of these is a decision I made instead of asking. Each one is a good questio
 13. B3: "minted tokens plus fractional entitlements equal exactly the old supply × 3/2" is read as *new
     holdings* (old + minted) + fractions = old × 3/2. The tests also assert the equivalent statement
     for the increase alone (minted + fractions = old × 1/2). Reverse splits are rejected.
+14. B1: a final revert (e.g. recipient not yet verified) is `failed` and is never retried automatically.
+    `retryFailedIssuance(request)` retries it once a human has fixed the cause. The contract allows this
+    (a reverted mint does not burn the ID), and the old attempts are kept in `failedAttempts`.
+15. B2 reports two things. `discrepancies` holds new findings from this batch only, so a replay adds
+    nothing. `standingMismatches` is a full register-vs-chain snapshot over every known address, so drift
+    on a holder with no events in the batch is still caught. That snapshot repeats until fixed.
 
 ## Unfinished / known gaps
 

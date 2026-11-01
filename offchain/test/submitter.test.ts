@@ -234,6 +234,30 @@ describe('submitIssuance', () => {
     expect((await rec())!.attempts).toHaveLength(1);
   });
 
+  it('a failed issuance stays failed on resubmit, and mints once on an explicit retry after onboarding', async () => {
+    const { chain, make, rec } = harness();
+    chain.unverified.add(ALICE.toLowerCase());
+    const s = make();
+    expect((await s.submitIssuance(REQ)).status).toBe('failed');
+    expect((await s.submitIssuance(REQ)).status).toBe('failed'); // no silent auto-retry
+
+    chain.unverified.delete(ALICE.toLowerCase()); // recipient onboarded
+    expect((await s.retryFailedIssuance(REQ)).status).toBe('confirmed');
+    expect(chain.mintCount(REQ.issuanceId)).toBe(1);
+    const r = (await rec())!;
+    expect(r.attempts).toHaveLength(1);
+    expect(r.failedAttempts).toHaveLength(1);
+    assertConfirmedSurvivesShallowReorg(chain);
+  });
+
+  it('retryFailedIssuance refuses anything that is not failed', async () => {
+    const { make } = harness();
+    const s = make();
+    await expect(s.retryFailedIssuance(REQ)).rejects.toThrow('not failed');
+    await s.submitIssuance(REQ);
+    await expect(s.retryFailedIssuance(REQ)).rejects.toThrow('not failed');
+  });
+
   it('resubmitting a confirmed issuance returns the stored result without touching the chain', async () => {
     const { chain, make } = harness();
     const s = make();

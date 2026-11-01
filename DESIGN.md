@@ -3,28 +3,22 @@
 ## 1. Placement
 
 **Authorisations live in a T-REX compliance module** (`TransferAuthorisationModule`), bound to the token's
-`ModularCompliance`. In T-REX 4.1.6, `transfer`/`transferFrom` call `canTransfer` → `moduleCheck`, then
-`transferred` → `moduleTransferAction`, in the same call. `forcedTransfer`, `recoveryAddress` and `burn` never
-call `canTransfer`. So holder transfers are gated and agent operations are not (R5), without touching the
-audited token implementation behind the implementation authority. `moduleCheck` gates; `moduleTransferAction`
-consumes.
+`ModularCompliance`. In T-REX 4.1.6, `transfer`/`transferFrom` call `canTransfer` (→ `moduleCheck`, which
+gates) and then `transferred` (→ `moduleTransferAction`, which consumes). `forcedTransfer`, `recoveryAddress`
+and `burn` never call `canTransfer`. So holder transfers are gated and agent operations are not (R5), and
+the audited token implementation stays untouched.
 
-Rejected:
-- **Forking or subclassing `Token`.** It leaves the shared implementation-authority upgrade path and the
-  audit.
-- **A router that holders must call.** Holders can still call the token directly, unless plain
-  transfers are disabled, which again means changing the token.
-- **T-REX's own `ConditionalTransferModule`.** No expiry, no IDs, and approvals can only be set via
-  `ModularCompliance.callModuleFunction`. The backend hot key would have to own the compliance, which
-  can add and remove modules.
+Rejected: **forking `Token`** (leaves the shared implementation-authority upgrade path and the audit);
+**a mandatory router** (holders can still call the token unless it is changed); **T-REX's
+`ConditionalTransferModule`** (no expiry or IDs, and approvals go through `callModuleFunction`, so the
+backend hot key would have to own the compliance, which can add and remove modules).
 
-Two consequences I accepted:
-- **Agent path.** `moduleTransferAction` cannot tell a forced transfer from a holder one. It consumes an
-  exactly matching live authorisation and is otherwise a no-op. A forced transfer that is exactly an
-  authorised movement therefore spends that authorisation. I think that is right: the authorised movement
-  happened, and it must not happen twice.
+Accepted consequences:
+- **Agent path.** `moduleTransferAction` cannot tell forced from holder transfers, so it consumes an exactly
+  matching live authorisation and is otherwise a no-op. A forced transfer of exactly an authorised movement
+  spends it. That is right: the movement happened and must not happen twice.
 - **Fake compliances.** `AbstractModule.bindCompliance` is permissionless, so consumption also requires
-  `token.compliance() == msg.sender`. A self-bound fake compliance cannot burn holders' authorisations.
+  `token.compliance() == msg.sender`.
 
 **Issuance dedup lives on-chain in `IssuanceGateway`**, the only routine minter (a token agent). Only an
 on-chain check survives a crash between broadcast and DB commit, a resubmitted tx, or two backend
@@ -111,24 +105,16 @@ problems:
 
 ## 5. Liquidity (AMM)
 
-**No.** Three things block it:
-- The pool must be a verified identity.
-- Every swap leg needs an exact pre-issued authorisation, but output amounts are set by the curve at
-  execution, and the pool initiates its own outgoing transfer.
-- An LP pool is an omnibus holder, so the register would no longer know who owns what.
+**No.** The pool must be a verified identity; every swap leg needs an exact pre-issued authorisation, but
+the curve sets output amounts at execution and the pool initiates its own outgoing transfer; and an LP pool
+is an omnibus holder, so the register no longer knows who owns what.
 
-**What would work:**
-- A permissioned venue: a pool or hook that checks trader verification, with a module rule that exempts
-  transfers to and from that venue from authorisation.
-- The register treats the pool as an omnibus account with a sub-ledger rebuilt from pool events.
+**What would work:** a permissioned venue (a pool or hook that checks trader verification), with a module
+rule exempting transfers to and from it, and the pool treated as an omnibus account whose sub-ledger is
+rebuilt from pool events. **Cost:** the backend loses pre-trade control (its rules become on-chain rules or
+post-trade checks), MEV exposure, and likely venue licensing (MTF/ATS).
 
-**Cost:**
-- The backend loses pre-trade control: its off-chain business rules must become on-chain rules or
-  post-trade checks.
-- MEV and front-running.
-- Likely venue licensing (MTF/ATS).
-
-I'd recommend RFQ or order-book matching off-chain with atomic on-chain settlement instead (T-REX ships
+I'd recommend off-chain RFQ or order-book matching with atomic on-chain settlement instead (T-REX ships
 `DVDTransferManager`). It keeps the authorisation model.
 
 ## 6. Alternatives
