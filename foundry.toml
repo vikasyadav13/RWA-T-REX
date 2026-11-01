@@ -1,0 +1,22 @@
+[profile.default]
+src = "contracts"
+test = "test"
+out = "out"
+libs = ["lib"]
+# T-REX 4.1.6 and OnchainID 2.1.0 both pin 0.8.17; build everything with the same compiler.
+solc_version = "0.8.17"
+optimizer = true
+optimizer_runs = 200
+ignored_warnings_from = ["lib"]
+remappings = [
+    "forge-std/=lib/forge-std/src/",
+    "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+    "@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/",
+    "@onchain-id/solidity/=lib/solidity/",
+    "@tokenysolutions/t-rex/=lib/T-REX/",
+]
+
+[invariant]
+runs = 64
+depth = 64
+fail_on_revert = false
